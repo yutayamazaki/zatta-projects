@@ -19,7 +19,7 @@ class TCPServer:
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((self.host, self.port))
-            s.listen(5)  # Start listening for connection.
+            s.listen(5)
 
             print(f'Listening at: {s.getsockname()}')
 
@@ -36,14 +36,26 @@ class TCPServer:
 
 class Request:
 
-    def __init__(self, data: bytes):
-        self.method: Optional[str] = None
-        self.uri: Optional[str] = None
-        self.http_version: str = 'HTTP/1.1'
-        self.headers: Dict[str, str] = {}
-        self.body: Optional[bytes] = None
+    def __init__(
+        self,
+        method: Optional[str] = None,
+        uri: Optional[str] = None,
+        http_version: str = 'HTTP/1.1',
+        headers: Optional[Dict[str, str]] = None,
+        body: Optional[bytes] = None
+    ):
+        self.method = method
+        self.uri = uri
+        self.http_version = http_version
+        self.headers = headers
+        self.body = body
 
-        self.parse(data)
+    @classmethod
+    def from_bytes(cls, data: bytes):
+        method, uri, http_version = cls._parse_method(data)
+        headers: Dict[str, str] = cls._parse_headers(data)
+        body: bytes = cls._parse_body(data)
+        return cls(method, uri, http_version, headers, body)
 
     @staticmethod
     def _parse_headers(data: bytes) -> Dict[str, str]:
@@ -64,25 +76,26 @@ class Request:
             return request_components[1]
         return b''
 
-    def parse(self, data: bytes):
-        self.headers = self._parse_headers(data)
-        self.body = self._parse_body(data)
-
+    @staticmethod
+    def _parse_method(data: bytes):
         lines: List[bytes] = data.split(b'\r\n')
         request_line: bytes = lines[0]
         words: List[bytes] = request_line.split(b' ')
-        self.method = words[0].decode()
+        method = words[0].decode()
 
+        uri = None
+        http_version = 'HTTP/1.1'
         if len(words) > 1:
-            self.uri = words[1].decode()
+            uri = words[1].decode()
         if len(words) > 2:
-            self.http_version = words[2].decode()
+            http_version = words[2].decode()
+        return method, uri, http_version
 
 
 class HTTPServer(TCPServer):
 
     def handle_request(self, data: bytes) -> bytes:
-        request: Request = Request(data)
+        request: Request = Request.from_bytes(data)
         print(request.headers, request.body)
 
         if request.method not in HTTP_METHODS:
